@@ -40,7 +40,7 @@
 ```yaml
 services:
   pagelet:
-    image: ghcr.io/qiuos/pagelet:0.0.1
+    image: ghcr.io/qiuos/pagelet:latest
     container_name: pagelet
     restart: unless-stopped
     ports:
