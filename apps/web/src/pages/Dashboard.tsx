@@ -80,21 +80,21 @@ export default function Dashboard() {
       <header className="sticky top-0 z-50 glass-effect border-b border-[var(--border)]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 sm:gap-8">
-            <h1 
+            <h1
               className="text-xl sm:text-2xl font-black tracking-tighter cursor-pointer text-gradient"
               onClick={() => navigate('/dashboard')}
             >
               Pagelet
             </h1>
-            
+
             <nav className="hidden md:flex items-center gap-1">
               {['all', 'active', 'archived'].map((f) => (
                 <button
                   key={f}
                   onClick={() => setStatusFilter(f as any)}
                   className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
-                    statusFilter === f 
-                    ? 'bg-[var(--accent)] text-white shadow-lg shadow-blue-500/20' 
+                    statusFilter === f
+                    ? 'bg-[var(--accent)] text-white shadow-lg shadow-blue-500/20'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
                   }`}
                 >
@@ -105,6 +105,18 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4 flex-1 justify-end">
+            {/* 移动端搜索输入框 */}
+            <div className="relative group flex-1 max-w-[140px] md:hidden">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索..."
+                className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-tertiary)] border-transparent focus:bg-[var(--bg-secondary)] border focus:border-[var(--accent)] outline-none transition-all text-sm font-medium"
+              />
+            </div>
+
+            {/* 桌面端搜索输入框 */}
             <div className="relative group hidden sm:block max-w-[300px] w-full">
               <input
                 type="text"
@@ -125,7 +137,16 @@ export default function Dashboard() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
               )}
             </button>
-            
+
+            {/* 移动端创建按钮（图标） */}
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="sm:hidden p-2 rounded-xl bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] shadow-lg shadow-blue-500/20 transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+            </button>
+
+            {/* 桌面端创建按钮（文字） */}
             <button
               onClick={() => setShowUploadModal(true)}
               className="hidden sm:block px-6 py-2 bg-[var(--accent)] text-white rounded-xl hover:bg-[var(--accent-hover)] shadow-lg shadow-blue-500/20 transition-all font-bold text-sm"
@@ -133,7 +154,7 @@ export default function Dashboard() {
               创建项目
             </button>
 
-            <div 
+            <div
               className="flex items-center gap-3 pl-4 border-l border-[var(--border)] cursor-pointer group"
               onClick={() => navigate('/settings')}
             >
@@ -146,6 +167,23 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* 移动端状态筛选 */}
+        <div className="md:hidden border-t border-[var(--border)] px-4 py-2 flex items-center gap-1">
+          {['all', 'active', 'archived'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f as any)}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                statusFilter === f
+                ? 'bg-[var(--accent)] text-white shadow-lg shadow-blue-500/20'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+              }`}
+            >
+              {f === 'all' ? '全部' : f === 'active' ? '活跃' : '归档'}
+            </button>
+          ))}
         </div>
       </header>
 

@@ -174,7 +174,7 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                placeholder="例如：2024 年度报告"
+                placeholder="作品集展示、简历、演示汇报"
                 className="w-full px-4 py-3 rounded-2xl bg-[var(--bg-tertiary)] border-transparent focus:bg-[var(--bg-primary)] border focus:border-[var(--accent)] outline-none transition-all font-medium"
               />
             </div>
