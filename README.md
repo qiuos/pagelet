@@ -44,13 +44,13 @@ services:
     container_name: pagelet
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     volumes:
       - pagelet-data:/app/apps/server/data
     environment:
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:${PORT:-3000}}
 
 volumes:
   pagelet-data:
@@ -79,7 +79,7 @@ docker compose up -d --build
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `PORT` | `3000` | 服务端口 |
+| `PORT` | `3000` | 宿主机映射端口（容器内固定 3000） |
 | `JWT_SECRET` | `please-change-this-...` | JWT 签名密钥，生产环境务必修改 |
 | `ADMIN_USERNAME` | `admin` | 管理员用户名（首次启动生效） |
 | `CORS_ORIGINS` | `http://localhost:3000` | 允许的跨域来源 |

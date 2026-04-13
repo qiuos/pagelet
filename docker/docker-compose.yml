@@ -6,7 +6,7 @@ services:
     container_name: pagelet
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     volumes:
       - pagelet-data:/app/apps/server/data
     environment:
@@ -17,7 +17,7 @@ services:
       - PROJECTS_DIR=./data/projects
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:${PORT:-3000}}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
