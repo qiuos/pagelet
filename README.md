@@ -35,19 +35,45 @@
 
 ### Docker Compose 一键部署
 
+创建 `docker-compose.yml`：
+
+```yaml
+services:
+  pagelet:
+    image: ghcr.io/qiuos/pagelet:0.0.1
+    container_name: pagelet
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - pagelet-data:/app/apps/server/data
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+
+volumes:
+  pagelet-data:
+```
+
+启动服务：
+
 ```bash
-# 1. 克隆仓库
-git clone <repo-url> && cd pagelet
+docker compose up -d
 
-# 2. 启动服务
-cd docker
-docker compose up -d --build
-
-# 3. 查看初始管理员密码
+# 查看初始管理员密码
 docker compose logs | grep "管理员"
 ```
 
 服务启动后访问 **http://localhost:3000**。
+
+### 从源码构建部署
+
+```bash
+git clone https://github.com/qiuos/pagelet.git && cd pagelet
+cd docker
+docker compose up -d --build
+```
 
 ### 环境变量
 
