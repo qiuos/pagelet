@@ -5,13 +5,15 @@ services:
       dockerfile: docker/Dockerfile
     container_name: pagelet
     restart: unless-stopped
+    # host 网络模式：注释掉 ports，取消注释 network_mode
+    # network_mode: host
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     volumes:
       - pagelet-data:/app/apps/server/data
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=${PORT:-3000}
       - DATABASE_PATH=./data/data.db
       - UPLOADS_DIR=./data/uploads
       - PROJECTS_DIR=./data/projects
@@ -19,7 +21,7 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:${PORT:-3000}}
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:${PORT:-3000}/health', r => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3

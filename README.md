@@ -44,10 +44,11 @@ services:
     container_name: pagelet
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     volumes:
       - pagelet-data:/app/apps/server/data
     environment:
+      - PORT=${PORT:-3000}
       - JWT_SECRET=${JWT_SECRET:-please-change-this-secret-in-production}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:${PORT:-3000}}
@@ -79,12 +80,27 @@ docker compose up -d --build
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `PORT` | `3000` | 宿主机映射端口（容器内固定 3000） |
+| `PORT` | `3000` | 服务端口（host 模式下同时控制容器内监听端口） |
 | `JWT_SECRET` | `please-change-this-...` | JWT 签名密钥，生产环境务必修改 |
 | `ADMIN_USERNAME` | `admin` | 管理员用户名（首次启动生效） |
 | `CORS_ORIGINS` | `http://localhost:3000` | 允许的跨域来源 |
 
 可在 `docker/docker-compose.yml` 中或通过 `.env` 文件配置。
+
+### Host 网络模式
+
+如需使用宿主机网络（避免端口映射开销、方便局域网访问），修改 `docker-compose.yml`：
+
+```yaml
+services:
+  pagelet:
+    # ...
+    network_mode: host    # 启用 host 网络
+    # ports:              # 注释掉 ports
+    #   - "..."
+```
+
+host 模式下 `PORT` 变量直接控制容器监听端口。
 
 ### 数据持久化
 
