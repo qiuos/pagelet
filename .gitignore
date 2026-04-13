@@ -1,0 +1,58 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Turbo
+.turbo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Design docs
+pagelet-design.md
+
+# AI memory
+.claude/
+.ai-memory
+.ai_memory/
+
+# Database
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
+apps/server/data/*.db
+apps/server/data/*.db-journal
+apps/server/data/*.db-shm
+apps/server/data/*.db-wal
+
+# Uploaded files
+data/uploads/*
+data/projects/*
+!data/uploads/.gitkeep
+!data/projects/.gitkeep
+apps/server/data/uploads/
+apps/server/data/projects/

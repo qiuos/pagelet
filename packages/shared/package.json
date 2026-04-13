@@ -1,0 +1,17 @@
+{
+  "name": "@pagelet/shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for Pagelet",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup index.ts --format cjs,esm --dts",
+    "dev": "tsup index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint . --ext .ts"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.8.2"
+  }
+}

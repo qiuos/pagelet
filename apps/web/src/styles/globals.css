@@ -1,0 +1,122 @@
+/* 导入字体 - 必须放在最前面 */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #fbfbfd;
+    --bg-tertiary: #f5f5f7;
+    --text-primary: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --accent: #0066cc;
+    --accent-hover: #0077ed;
+    --border: #d2d2d7;
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    --card-shadow-hover: 0 8px 18px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark {
+    --bg-primary: #000000;
+    --bg-secondary: #161617;
+    --bg-tertiary: #1d1d1f;
+    --text-primary: #f5f5f7;
+    --text-secondary: #86868b;
+    --accent: #2997ff;
+    --accent-hover: #47a4ff;
+    --border: #424245;
+    --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --card-shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  body {
+    @apply antialiased;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    line-height: 1.6;
+  }
+}
+
+@layer components {
+  .apple-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: var(--card-shadow);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .apple-card:hover {
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-4px);
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-xl bg-white/70 dark:bg-black/70;
+  }
+
+  .poster-cover {
+    @apply relative overflow-hidden rounded-2xl shadow-lg bg-[var(--bg-tertiary)];
+    aspect-ratio: 1.5 / 1;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .poster-cover:hover {
+    @apply shadow-2xl;
+    transform: scale(1.02);
+  }
+
+  .poster-overlay {
+    @apply absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 transition-opacity duration-300;
+  }
+
+  .poster-cover:hover .poster-overlay {
+    @apply opacity-100;
+  }
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 10px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #333333;
+}
+
+/* 渐变文本 */
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-br from-black via-black to-black/60;
+}
+
+.dark .text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-br from-white via-white to-white/40;
+}
+
+/* 隐藏原生日期指示器并使全域可点击 */
+.custom-datetime-input::-webkit-calendar-picker-indicator {
+  background: transparent;
+  bottom: 0;
+  color: transparent;
+  cursor: pointer;
+  height: auto;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: auto;
+}
