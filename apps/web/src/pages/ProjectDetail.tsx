@@ -19,6 +19,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const loadProject = useCallback(async () => {
@@ -51,13 +52,19 @@ export default function ProjectDetail() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!project || !confirm('确定要删除此项目吗？')) return;
+  const handleDelete = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!project) return;
     try {
       await projectsApi.delete(project.id);
       navigate('/dashboard');
     } catch (err) {
       alert('删除失败');
+    } finally {
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -296,6 +303,44 @@ export default function ProjectDetail() {
           }}
         />
       )}
+
+      {/* 删除确认弹窗 */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[var(--bg-primary)] rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-[var(--border)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-2">确认删除</h3>
+              <p className="text-[var(--text-secondary)] text-sm mb-6">确定要删除此项目吗？此操作不可撤销。</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-tertiary)] transition-all font-bold text-sm"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-all font-bold text-sm"
+                >
+                  删除
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

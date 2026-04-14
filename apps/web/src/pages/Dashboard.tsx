@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -58,12 +59,18 @@ export default function Dashboard() {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!confirm('确定要删除此项目吗？')) return;
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await projectsApi.delete(id);
-      setProjects(projects.filter(p => p.id !== id));
+      await projectsApi.delete(deleteTarget);
+      setProjects(projects.filter(p => p.id !== deleteTarget));
     } catch (err) {
       setError('删除失败');
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -246,8 +253,18 @@ export default function Dashboard() {
                       </div>
                     )}
                     
-                    {/* 信息悬停层 */}
-                    <div className="poster-overlay flex flex-col justify-end p-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    {/* 移动端删除按钮 */}
+                    <button
+                      onClick={(e) => handleDelete(e, project.id)}
+                      className="md:hidden absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-black/40 text-white/80 backdrop-blur-sm active:bg-red-500/80 transition-all"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+
+                    {/* 桌面端信息悬停层 */}
+                    <div className="poster-overlay hidden md:flex flex-col justify-end p-5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <div className="mb-2">
                         <span className="text-[10px] uppercase tracking-widest font-black bg-white/20 text-white px-2 py-1 rounded-md backdrop-blur-md">
                           {project.fileType}
@@ -259,7 +276,7 @@ export default function Dashboard() {
                       <p className="text-[10px] text-white/70 font-medium">
                          {new Date(project.updatedAt).toLocaleDateString()} 更新
                       </p>
-                      
+
                       <button
                         onClick={(e) => handleDelete(e, project.id)}
                         className="absolute top-4 right-4 p-2 rounded-xl bg-red-500/80 text-white hover:bg-red-600 transition-all opacity-0 group-hover:opacity-100"
@@ -269,6 +286,16 @@ export default function Dashboard() {
                         </svg>
                       </button>
                     </div>
+                  </div>
+
+                  {/* 移动端项目信息 */}
+                  <div className="md:hidden px-1 pt-3 pb-1">
+                    <h3 className="font-bold text-sm leading-tight truncate">
+                      {project.name}
+                    </h3>
+                    <p className="text-[10px] text-[var(--text-secondary)] font-medium mt-0.5">
+                      {new Date(project.updatedAt).toLocaleDateString()} 更新
+                    </p>
                   </div>
                 </motion.div>
               ))}
@@ -283,6 +310,44 @@ export default function Dashboard() {
           onUploaded={() => loadProjects()}
         />
       )}
+
+      {/* 删除确认弹窗 */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[var(--bg-primary)] rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-[var(--border)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-2">确认删除</h3>
+              <p className="text-[var(--text-secondary)] text-sm mb-6">确定要删除此项目吗？此操作不可撤销。</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-tertiary)] transition-all font-bold text-sm"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-all font-bold text-sm"
+                >
+                  删除
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
