@@ -4,11 +4,14 @@ import { findShareBySlug, validateShare, incrementViewCount, logView } from '../
 import { findProjectById } from '../services/projectService';
 import { findUserById } from '../services/userService';
 import { ApiResponse, ApiError, ERROR_CODES } from '@pagelet/shared';
-import { appConfig } from '../config';
-import path from 'path';
-import fs from 'fs';
+import { getProjectFilePath, projectFileExists } from '../services/storageService';
+import { hasShareCookie, setShareCookie } from '../utils/shareToken';
 
 const router = Router();
+router.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
 
 /**
  * GET /s/:slug
@@ -56,7 +59,7 @@ router.get('/:slug', (req: Request, res: Response): void => {
   }
 
   // 获取关联项目
-  const project = findProjectById(share.projectId);
+  const project = findProjectById(share.projectId, false);
   if (!project) {
     const error: ApiError = {
       success: false,
@@ -86,7 +89,7 @@ router.get('/:slug', (req: Request, res: Response): void => {
   }> = {
     success: true,
     data: {
-      share,
+      share: { ...share, password: undefined, passwordHash: undefined },
       project: {
         id: project.id,
         name: project.name,
@@ -153,11 +156,7 @@ router.post(
     }
 
     // 验证成功，设置 cookie 并返回
-    res.cookie(`share_token_${slug}`, '1', {
-      maxAge: 24 * 60 * 60 * 1000, // 24 小时
-      httpOnly: false,
-      path: '/'
-    });
+    setShareCookie(req, res, share, 'password');
     const response: ApiResponse<{ valid: boolean }> = {
       success: true,
       data: { valid: true }
@@ -166,148 +165,60 @@ router.post(
   }
 );
 
-/**
- * GET /s/:slug/view
- * 获取项目入口文件
- */
-router.get('/:slug/view', (req: Request, res: Response): void => {
+// A signed 30-minute visit admits relative pages/resources after the final allowed view.
+// Every request still checks active/expiry/password state; a fresh entry navigation consumes a view.
+router.get(['/:slug/view', '/:slug/view/*'], (req: Request, res: Response): void => {
   const { slug } = req.params;
   const share = findShareBySlug(slug);
-
   if (!share) {
     res.status(404).send('分享链接不存在');
     return;
   }
-
-  // 检查是否有密码保护
-  if (share.passwordHash) {
-    const token = req.headers['x-share-token'] || (req as any).cookies?.[`share_token_${slug}`];
-    if (!token) {
-      res.status(401).send('需要验证密码');
-      return;
-    }
-  }
-
-  // 验证分享链接有效性（密码已通过 cookie 验证，跳过密码检查）
-  if (!share.isActive) {
-    res.status(400).send('分享链接已被禁用');
+  if (!share.isActive || (share.expiresAt && new Date(share.expiresAt).getTime() <= Date.now())) {
+    res.status(400).send(!share.isActive ? '分享链接已被禁用' : '分享链接已过期');
     return;
   }
-  if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
-    res.status(400).send('分享链接已过期');
+  if (share.passwordHash && !hasShareCookie(req, share, 'password')) {
+    res.status(401).send('需要验证密码');
     return;
   }
-  if (share.maxViews && share.viewCount >= share.maxViews) {
-    res.status(400).send('分享链接已达到最大访问次数');
-    return;
-  }
-  if (share.isOneTime && share.viewCount >= 1) {
-    res.status(400).send('一次性链接已失效');
-    return;
-  }
-
-  // 获取项目
-  const project = findProjectById(share.projectId);
+  const project = findProjectById(share.projectId, false);
   if (!project) {
     res.status(404).send('项目不存在');
     return;
   }
-
-  // 获取入口文件
+  const isRedirect = req.params[0] === undefined;
+  const file = isRedirect ? project.entryFile : req.params[0];
   try {
-    const projectPath = path.join(appConfig.projectsDir, project.id);
-    const fullPath = path.resolve(projectPath, project.entryFile);
-
-    if (!fs.existsSync(fullPath)) {
-      res.status(404).send('项目文件不存在');
-      return;
-    }
-
-    // 记录访问日志
-    incrementViewCount(share.id);
-    logView(share.id, {
-      ipAddress: req.ip || req.socket.remoteAddress,
-      userAgent: req.headers['user-agent'],
-      referer: req.headers.referer
-    });
-
-    res.sendFile(fullPath);
-  } catch (err) {
-    console.error('[FileServe Error]', err);
-    res.status(500).send('服务器错误');
-  }
-});
-
-/**
- * GET /s/:slug/view/*
- * 获取项目文件（静态资源服务）
- */
-router.get('/:slug/view/:file*', (req: Request, res: Response): void => {
-  const { slug } = req.params;
-  const share = findShareBySlug(slug);
-
-  if (!share) {
-    res.status(404).send('分享链接不存在');
-    return;
-  }
-
-  // 检查是否有密码保护
-  if (share.passwordHash) {
-    const token = req.headers['x-share-token'] || (req as any).cookies?.[`share_token_${slug}`];
-    if (!token) {
-      res.status(401).send('需要验证密码');
-      return;
-    }
-  }
-
-  // 验证分享链接有效性（密码已通过 cookie 验证）
-  if (!share.isActive) {
-    res.status(400).send('分享链接已被禁用');
-    return;
-  }
-  if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
-    res.status(400).send('分享链接已过期');
-    return;
-  }
-  if (share.maxViews && share.viewCount >= share.maxViews) {
-    res.status(400).send('分享链接已达到最大访问次数');
-    return;
-  }
-  if (share.isOneTime && share.viewCount >= 1) {
-    res.status(400).send('一次性链接已失效');
-    return;
-  }
-
-  // 获取项目
-  const project = findProjectById(share.projectId);
-  if (!project) {
-    res.status(404).send('项目不存在');
-    return;
-  }
-
-  // 获取请求的文件路径
-  const filePath = req.params.file || project.entryFile;
-
-  // 安全检查
-  if (filePath.includes('..')) {
-    res.status(400).send('非法的文件路径');
-    return;
-  }
-
-  // 获取文件
-  try {
-    const projectPath = path.join(appConfig.projectsDir, project.id);
-    const fullPath = path.resolve(projectPath, filePath);
-
-    if (!fs.existsSync(fullPath)) {
+    if (!projectFileExists(project.id, file)) {
       res.status(404).send('文件不存在');
       return;
     }
-
-    res.sendFile(fullPath);
-  } catch (err) {
-    console.error('[FileServe Error]', err);
-    res.status(500).send('服务器错误');
+    const hasVisit = hasShareCookie(req, share, 'visit');
+    const isEntry = getProjectFilePath(project.id, file) === getProjectFilePath(project.id, project.entryFile);
+    const overLimit = (share.maxViews !== undefined && share.viewCount >= share.maxViews) ||
+      (share.isOneTime && share.viewCount >= 1);
+    if ((isRedirect || isEntry || !hasVisit) && overLimit) {
+      res.status(400).send('分享链接已达到最大访问次数');
+      return;
+    }
+    if (isRedirect) {
+      const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+      res.redirect(302, `/api/s/${slug}/view/${project.entryFile.split('/').map(encodeURIComponent).join('/')}${query}`);
+      return;
+    }
+    if (req.method !== 'HEAD' && (isEntry || (!hasVisit && /\.html?$/i.test(file)))) {
+      incrementViewCount(share.id);
+      logView(share.id, {
+        ipAddress: req.ip || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        referer: req.headers.referer
+      });
+      setShareCookie(req, res, share, 'visit');
+    }
+    res.sendFile(getProjectFilePath(project.id, file), { cacheControl: false, dotfiles: 'allow' });
+  } catch {
+    res.status(400).send('非法的文件路径');
   }
 });
 

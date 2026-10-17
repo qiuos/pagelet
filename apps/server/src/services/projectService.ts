@@ -2,6 +2,7 @@ import db from '../models/db';
 import { Project, ProjectWithShares, FileType, ProjectStatus, Share } from '@pagelet/shared';
 import { generateUuid } from '../utils/slug';
 import { getThumbnail } from './thumbnailService';
+import { listProjectFiles, validateEntryFile } from './storageService';
 
 interface DbProject {
   id: string;
@@ -16,8 +17,8 @@ interface DbProject {
   updated_at: string;
 }
 
-function rowToProject(row: DbProject): Project {
-  const thumbnail = getThumbnail(row.id);
+function rowToProject(row: DbProject, includeThumbnail = true): Project {
+  const thumbnail = includeThumbnail ? getThumbnail(row.id) : null;
   return {
     id: row.id,
     name: row.name,
@@ -70,9 +71,9 @@ export function createProject(
 /**
  * 根据 ID 查找项目
  */
-export function findProjectById(id: string): Project | null {
+export function findProjectById(id: string, includeThumbnail = true): Project | null {
   const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as DbProject | undefined;
-  return row ? rowToProject(row) : null;
+  return row ? rowToProject(row, includeThumbnail) : null;
 }
 
 /**
@@ -82,7 +83,7 @@ export function findProjectsByUserId(userId: string): Project[] {
   const rows = db.prepare(`
     SELECT * FROM projects WHERE created_by = ? ORDER BY created_at DESC
   `).all(userId) as DbProject[];
-  return rows.map(rowToProject);
+  return rows.map(row => rowToProject(row));
 }
 
 /**
@@ -94,6 +95,9 @@ export function updateProject(
     name?: string;
     description?: string;
     status?: ProjectStatus;
+    entryFile?: string;
+    fileType?: FileType;
+    fileSize?: number;
   }
 ): Project | null {
   const project = findProjectById(id);
@@ -103,10 +107,11 @@ export function updateProject(
   const name = updates.name ?? project.name;
   const description = updates.description ?? project.description;
   const status = updates.status ?? project.status;
+  const entryFile = updates.entryFile !== undefined ? validateEntryFile(id, updates.entryFile) : project.entryFile;
 
   db.prepare(`
-    UPDATE projects SET name = ?, description = ?, status = ?, updated_at = ? WHERE id = ?
-  `).run(name, description || null, status, now, id);
+    UPDATE projects SET name = ?, description = ?, status = ?, entry_file = ?, file_type = ?, file_size = ?, updated_at = ? WHERE id = ?
+  `).run(name, description || null, status, entryFile, updates.fileType ?? project.fileType, updates.fileSize ?? project.fileSize, now, id);
 
   return findProjectById(id);
 }
@@ -139,6 +144,7 @@ export function findProjectWithShares(id: string): ProjectWithShares | null {
 
   return {
     ...project,
+    entryFiles: listProjectFiles(id).filter(name => /\.html?$/i.test(name)),
     shares: shares.map(rowToShare),
     shareCount: shares.length
   };
@@ -165,7 +171,7 @@ export function searchProjects(userId: string, query?: string, status?: ProjectS
   sql += ' ORDER BY created_at DESC';
 
   const rows = db.prepare(sql).all(...params) as DbProject[];
-  return rows.map(rowToProject);
+  return rows.map(row => rowToProject(row));
 }
 
 // 导入 DbShare 类型和 rowToShare 函数（从 shareService 导入）

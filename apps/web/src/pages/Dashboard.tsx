@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
@@ -9,7 +9,7 @@ import UploadModal from '../components/UploadModal';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, setUser, setLoading: setAuthLoading, logout } = useAuthStore();
+  const { user, setUser, setLoading: setAuthLoading } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -19,43 +19,41 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const authReady = useRef(false);
 
   const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await projectsApi.list();
+      setError('');
+      // 等 me 写入封面认证 cookie 后才渲染列表；两项请求仍可并行。
+      const [response, authResponse] = await Promise.all([
+        projectsApi.list(),
+        authReady.current ? Promise.resolve(null) : authApi.me(),
+      ]);
+      if (authResponse?.data.success) {
+        setUser(authResponse.data.data);
+        authReady.current = true;
+      }
       if (response.data.success) {
         setProjects(response.data.data);
       }
     } catch (err) {
       console.error('Failed to load projects:', err);
-      setError('加载项目失败');
+      setError('加载项目失败，请重试');
     } finally {
       setLoading(false);
+      setAuthLoading(false);
     }
-  }, []);
+  }, [setUser, setAuthLoading]);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const token = useAuthStore.getState().token;
-      if (token) {
-        try {
-          const response = await authApi.me();
-          if (response.data.success) {
-            setUser(response.data.data);
-          }
-          loadProjects();
-        } catch {
-          logout();
-          navigate('/login');
-        }
-      } else {
-        navigate('/login');
-      }
+    if (useAuthStore.getState().token) {
+      loadProjects();
+    } else {
+      navigate('/login');
       setAuthLoading(false);
-    };
-    checkAuth();
-  }, [navigate, loadProjects, setUser, logout, setAuthLoading]);
+    }
+  }, [navigate, loadProjects, setAuthLoading]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -204,6 +202,13 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {error && (
+          <div role="alert" className="mb-6 flex items-center gap-4 text-red-500">
+            <p>{error}</p>
+            <button onClick={loadProjects} disabled={loading} className="px-4 py-2 rounded-xl border border-[var(--border)] disabled:opacity-50">重试</button>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
             <div className="w-10 h-10 border-3 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
@@ -243,6 +248,8 @@ export default function Dashboard() {
                     {project.thumbnail ? (
                       <img
                         src={project.thumbnail}
+                        loading="lazy"
+                        decoding="async"
                         alt={project.name}
                         className="w-full h-full object-cover"
                       />

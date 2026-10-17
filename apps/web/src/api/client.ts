@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/authStore';
-import { ApiError } from '@pagelet/shared';
+import type { ApiError, UpdateProjectRequest } from '@pagelet/shared';
 
 const api = axios.create({
   baseURL: '/api',
@@ -62,7 +62,7 @@ export const projectsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: options?.onUploadProgress,
     }),
-  update: (id: string, data: { name?: string; description?: string; status?: string }) =>
+  update: (id: string, data: UpdateProjectRequest) =>
     api.put(`/projects/${id}`, data),
   delete: (id: string) => api.delete(`/projects/${id}`),
   preview: (id: string) => api.get(`/projects/${id}/preview`),

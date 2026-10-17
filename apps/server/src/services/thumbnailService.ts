@@ -2,6 +2,9 @@ import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import { appConfig } from '../config';
+import { pathToFileURL } from 'url';
+import { getProjectFilePath } from './storageService';
+import { findProjectById } from './projectService';
 
 // Get absolute path for projects directory
 const getProjectsDir = () => {
@@ -14,7 +17,7 @@ const getProjectsDir = () => {
  * 生成项目缩略图
  * @param projectId 项目 ID
  * @param htmlPath HTML 文件路径
- * @returns 缩略图的 base64 数据
+ * @returns 缩略图的认证 URL
  */
 export async function generateThumbnail(projectId: string, htmlPath: string): Promise<string | null> {
   let browser = null;
@@ -27,7 +30,6 @@ export async function generateThumbnail(projectId: string, htmlPath: string): Pr
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--disable-web-security',
       ],
     });
 
@@ -45,8 +47,15 @@ export async function generateThumbnail(projectId: string, htmlPath: string): Pr
       ? htmlPath
       : path.resolve(process.cwd(), htmlPath);
 
-    // 加载 HTML 文件
-    const fileUrl = `file://${absoluteHtmlPath}`;
+    // 缩略图只渲染静态内容，不执行上传脚本或请求外部网络。
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    const projectRoot = pathToFileURL(getProjectFilePath(projectId) + path.sep).href;
+    page.on('request', request => {
+      if (request.url().startsWith(projectRoot) || request.url().startsWith('data:')) request.continue();
+      else request.abort();
+    });
+    const fileUrl = pathToFileURL(absoluteHtmlPath).href;
     await page.goto(fileUrl, {
       waitUntil: 'networkidle0',
       timeout: 10000,
@@ -69,6 +78,13 @@ export async function generateThumbnail(projectId: string, htmlPath: string): Pr
     const thumbnailDir = path.join(projectsDir, projectId);
     const thumbnailPath = path.join(thumbnailDir, '.thumbnail.jpg');
 
+    // 旧任务完成时入口已被用户修改：跳过写盘，避免覆盖新入口封面。
+    const current = findProjectById(projectId);
+    if (current && getProjectFilePath(projectId, current.entryFile) !== absoluteHtmlPath) {
+      console.log('[Thumbnail] Skipped stale generation for:', projectId);
+      return getThumbnail(projectId);
+    }
+
     // 确保目录存在
     if (!fs.existsSync(thumbnailDir)) {
       fs.mkdirSync(thumbnailDir, { recursive: true });
@@ -76,7 +92,7 @@ export async function generateThumbnail(projectId: string, htmlPath: string): Pr
 
     fs.writeFileSync(thumbnailPath, Buffer.from(screenshot!, 'base64'));
 
-    return `data:image/jpeg;base64,${screenshot}`;
+    return getThumbnail(projectId);
   } catch (error) {
     console.error('[Thumbnail Error]', error);
     if (browser) {
@@ -89,22 +105,21 @@ export async function generateThumbnail(projectId: string, htmlPath: string): Pr
 /**
  * 获取项目缩略图
  * @param projectId 项目 ID
- * @returns 缩略图的 base64 数据，如果不存在则返回 null
+ * @returns 缩略图的认证 URL，如果不存在则返回 null
  */
-export function getThumbnail(projectId: string): string | null {
-  const projectsDir = getProjectsDir();
-  const thumbnailPath = path.join(projectsDir, projectId, '.thumbnail.jpg');
-
-  if (fs.existsSync(thumbnailPath)) {
-    try {
-      const buffer = fs.readFileSync(thumbnailPath);
-      return `data:image/jpeg;base64,${buffer.toString('base64')}`;
-    } catch {
-      return null;
-    }
+export function getThumbnailPath(projectId: string): string | null {
+  for (const ext of ['jpg', 'jpeg', 'png', 'gif', 'webp']) {
+    const thumbnailPath = path.join(getProjectsDir(), projectId, `.thumbnail.${ext}`);
+    if (fs.existsSync(thumbnailPath) && fs.lstatSync(thumbnailPath).isFile()) return thumbnailPath;
   }
-
   return null;
+}
+
+export function getThumbnail(projectId: string): string | null {
+  const thumbnailPath = getThumbnailPath(projectId);
+  if (!thumbnailPath) return null;
+  const stat = fs.statSync(thumbnailPath);
+  return `/api/projects/${projectId}/thumbnail?v=${stat.mtimeMs}-${stat.size}`;
 }
 
 /**

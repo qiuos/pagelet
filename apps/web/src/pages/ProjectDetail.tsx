@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { projectsApi, sharesApi } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import type { Project, Share, ApiError } from '@pagelet/shared';
-import ShareModal from '../components/ShareModal';
+const ShareModal = lazy(() => import('../components/ShareModal'));
 
 interface ProjectWithShares extends Project {
   shares: Share[];
@@ -294,6 +294,14 @@ export default function ProjectDetail() {
       </main>
 
       {showShareModal && (
+        <Suspense fallback={
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+            <div className="apple-card p-6">
+              <p role="status">正在加载分享设置...</p>
+              <button onClick={() => setShowShareModal(false)} className="mt-4 px-4 py-2 rounded-xl bg-[var(--bg-tertiary)]">取消</button>
+            </div>
+          </div>
+        }>
         <ShareModal
           projectId={id!}
           onClose={() => setShowShareModal(false)}
@@ -302,6 +310,7 @@ export default function ProjectDetail() {
             loadProject();
           }}
         />
+        </Suspense>
       )}
 
       {/* 删除确认弹窗 */}

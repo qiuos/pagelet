@@ -135,7 +135,6 @@ export function updateShare(
   const share = findShareById(id);
   if (!share) return null;
 
-  const now = new Date().toISOString();
   const setClauses: string[] = [];
   const params: (string | number | null)[] = [];
 
@@ -167,9 +166,6 @@ export function updateShare(
   }
 
   if (setClauses.length === 0) return share;
-
-  setClauses.push('updated_at = ?');
-  params.push(now);
 
   params.push(id);
 
