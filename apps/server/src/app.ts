@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
 import { appConfig } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import { loggerMiddleware, corsMiddleware } from './middleware/logger';
@@ -23,6 +24,11 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(compression());
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
 
 // API 路由
 app.use('/api/auth', authRoutes);
@@ -41,25 +47,34 @@ app.get('/health', (_req, res) => {
 // 生产环境：提供前端静态文件
 if (appConfig.nodeEnv === 'production') {
   const publicDir = path.join(__dirname, '../public');
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, {
+    setHeaders(res, filePath) {
+      const isHashedAsset = path.dirname(filePath) === path.join(publicDir, 'assets') &&
+        /-[\w-]{8,}\.[^.]+$/.test(path.basename(filePath));
+      res.setHeader('Cache-Control', isHashedAsset ? 'public, max-age=31536000, immutable' : 'no-cache');
+    }
+  }));
   // SPA fallback - 非 API 路由返回 index.html
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(publicDir, 'index.html'));
+  app.get('*', (req, res, next) => {
+    if (req.path === '/api' || req.path.startsWith('/api/')) {
+      next();
+      return;
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(publicDir, 'index.html'), { cacheControl: false });
   });
 }
 
-// 404 处理 (仅开发环境)
-if (appConfig.nodeEnv !== 'production') {
-  app.use((_req, res) => {
-    res.status(404).json({
-      success: false,
-      error: {
-        code: 'NOT_FOUND',
-        message: '接口不存在'
-      }
-    });
+// 未匹配的 API 不得返回 SPA HTML。
+app.use((_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: '接口不存在'
+    }
   });
-}
+});
 
 // 错误处理
 app.use(errorHandler);

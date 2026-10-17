@@ -1,11 +1,35 @@
+import { Component, lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import ProjectDetail from './pages/ProjectDetail';
-import ProjectEdit from './pages/ProjectEdit';
-import Settings from './pages/Settings';
-import ShareView from './pages/ShareView';
+
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const ProjectEdit = lazy(() => import('./pages/ProjectEdit'));
+const Settings = lazy(() => import('./pages/Settings'));
+const ShareView = lazy(() => import('./pages/ShareView'));
+
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4 bg-[var(--bg-primary)]">
+          <p role="alert">页面加载失败，请重新加载。</p>
+          <button className="px-4 py-2 rounded-xl bg-[var(--accent)] text-white" onClick={() => window.location.reload()}>
+            重新加载
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // 路由守卫
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -32,6 +56,8 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <BrowserRouter>
+      <RouteErrorBoundary>
+        <Suspense fallback={<div role="status" className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)] text-[var(--text-secondary)]">加载中...</div>}>
       <Routes>
         {/* 公开路由 */}
         <Route
@@ -84,6 +110,8 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+        </Suspense>
+      </RouteErrorBoundary>
     </BrowserRouter>
   );
 }

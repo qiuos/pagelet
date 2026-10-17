@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { generateToken } from '../utils/jwt';
 import { findUserByUsername, findUserById, findUserByIdWithPassword, createUser, verifyPassword, updateUserPassword, ensureAdminUser, countUsers } from '../services/userService';
-import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { authMiddleware, AuthRequest, setAuthCookie } from '../middleware/auth';
 import { ApiResponse, ApiError, ERROR_CODES, User } from '@pagelet/shared';
 
 const router = Router();
@@ -100,6 +100,7 @@ router.post(
       data: { token, user }
     };
 
+    setAuthCookie(req, res, token);
     res.json(response);
   }
 );
@@ -109,6 +110,8 @@ router.post(
  * 用户登出
  */
 router.post('/logout', authMiddleware, (_req: Request, res: Response): void => {
+  res.clearCookie('token', { path: '/api' });
+  res.clearCookie('token', { path: '/' });
   const response: ApiResponse<null> = {
     success: true,
     data: null
@@ -136,6 +139,8 @@ router.get('/me', authMiddleware, (req: AuthRequest, res: Response): void => {
     return;
   }
 
+  const token = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : req.cookies?.token;
+  if (token) setAuthCookie(req, res, token);
   const response: ApiResponse<User> = {
     success: true,
     data: user

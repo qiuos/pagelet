@@ -1,13 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { projectsApi } from '../api/client';
-import type { ApiError } from '@pagelet/shared';
+import type { ApiError, Project } from '@pagelet/shared';
 
 interface UploadModalProps {
   onClose: () => void;
   onUploaded: () => void;
 }
 
-type CreationStage = 'form' | 'uploading' | 'processing' | 'complete';
+type CreationStage = 'form' | 'uploading' | 'processing' | 'entry' | 'complete';
 
 export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
   const [name, setName] = useState('');
@@ -19,6 +19,74 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
   const [dragActive, setDragActive] = useState(false);
   const [stage, setStage] = useState<CreationStage>('form');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [createdProject, setCreatedProject] = useState<Project | null>(null);
+  const [entryFile, setEntryFile] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleClose = () => {
+    if (uploading) return;
+    if (createdProject && stage !== 'complete') onUploaded();
+    onClose();
+  };
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    return () => {
+      clearTimeout(closeTimer.current);
+      previousFocus?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, [stage]);
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      handleClose();
+    }
+    if (e.key !== 'Tab') return;
+    const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
+    );
+    const focusable = Array.from(controls || []).filter(el => el.getClientRects().length > 0);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first) {
+      e.preventDefault();
+    } else if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.current)) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  const finishCreation = () => {
+    setStage('complete');
+    onUploaded();
+    closeTimer.current = setTimeout(onClose, 800);
+  };
+
+  const handleSaveEntry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createdProject || !entryFile || uploading) return;
+    setUploading(true);
+    setError('');
+    try {
+      const response = await projectsApi.update(createdProject.id, { entryFile });
+      if (!response.data.success) throw new Error('保存失败');
+      finishCreation();
+    } catch (err) {
+      const apiError = err as { response?: { data?: ApiError } };
+      setError(apiError.response?.data?.error?.message || '默认入口保存失败，请重试。项目已保留，无需重新上传。');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -66,6 +134,7 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createdProject || uploading) return;
     if (!file || !name.trim()) {
       setError('请选择文件并填写项目名称');
       return;
@@ -95,10 +164,14 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
           }
         }
       });
-      if (response.data.success) {
-        setStage('complete');
-        onUploaded();
-        setTimeout(() => onClose(), 800);
+      if (!response.data.success) throw new Error('上传失败');
+      const project: Project = response.data.data;
+      setCreatedProject(project);
+      setEntryFile(project.entryFile);
+      if ((project.entryFiles?.length || 0) > 1) {
+        setStage('entry');
+      } else {
+        finishCreation();
       }
     } catch (err) {
       const apiError = err as { response?: { data?: ApiError } };
@@ -112,14 +185,21 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-title"
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
         className="apple-card w-full max-w-lg overflow-hidden border-[var(--border)] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--border)] shrink-0">
-          <h2 className="text-xl font-bold tracking-tight">创建新项目</h2>
+          <h2 id="upload-title" className="text-xl font-bold tracking-tight">创建新项目</h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
+            aria-label={createdProject ? '关闭并保留项目' : '关闭创建项目'}
             disabled={uploading}
             className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bg-tertiary)] transition-colors text-xl font-light disabled:opacity-50"
           >
@@ -131,7 +211,7 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
           /* 表单内容 - 可滚动 */
           <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
             {error && (
-              <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-medium animate-fadeIn">
+              <div role="alert" className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-medium animate-fadeIn">
                 {error}
               </div>
             )}
@@ -143,6 +223,15 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              aria-label={file ? `更换文件：${file.name}` : '选择 HTML 或 ZIP 文件'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
               className={`relative p-10 border-2 border-dashed rounded-3xl cursor-pointer transition-all duration-300
                 ${dragActive
                   ? 'border-[var(--accent)] bg-[var(--accent)]/5 scale-[0.98]'
@@ -180,8 +269,9 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
             <div className="space-y-4">
               {/* 项目名称 */}
               <div>
-                <label className="block text-sm font-bold mb-2 ml-1">项目名称</label>
+                <label htmlFor="upload-name" className="block text-sm font-bold mb-2 ml-1">项目名称</label>
                 <input
+                  id="upload-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -193,8 +283,9 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
 
               {/* 项目描述 */}
               <div>
-                <label className="block text-sm font-bold mb-2 ml-1">项目描述 (可选)</label>
+                <label htmlFor="upload-description" className="block text-sm font-bold mb-2 ml-1">项目描述 (可选)</label>
                 <textarea
+                  id="upload-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
@@ -208,7 +299,7 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
             <div className="flex gap-4 pt-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="flex-1 py-3.5 rounded-2xl font-bold bg-[var(--bg-tertiary)] hover:bg-[var(--border)] transition-all"
               >
                 取消
@@ -225,9 +316,41 @@ export default function UploadModal({ onClose, onUploaded }: UploadModalProps) {
               </button>
             </div>
           </form>
+        ) : stage === 'entry' && createdProject ? (
+          <form onSubmit={handleSaveEntry} className="p-6 space-y-6 overflow-y-auto" aria-busy={uploading}>
+            <p role="status" className="text-sm text-[var(--text-secondary)]">
+              文件已上传，发现多个 HTML 页面。请选择分享时默认打开的页面，保存后完成创建。
+            </p>
+            {error && <p role="alert" className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm">{error}</p>}
+            <div>
+              <label htmlFor="upload-entry" className="block text-sm font-bold mb-2 ml-1">默认入口</label>
+              <select
+                id="upload-entry"
+                value={entryFile}
+                onChange={(e) => setEntryFile(e.target.value)}
+                disabled={uploading}
+                aria-describedby="upload-entry-path upload-entry-help"
+                className="w-full min-w-0 px-4 py-3 rounded-2xl bg-[var(--bg-tertiary)] border border-[var(--border)] focus:border-[var(--accent)] focus:outline-[var(--accent)] font-medium"
+              >
+                {createdProject.entryFiles?.map(path => <option key={path} value={path}>{path}</option>)}
+              </select>
+              <p id="upload-entry-path" className="mt-2 text-sm break-all">{entryFile}</p>
+              <details className="mt-3 text-sm">
+                <summary className="cursor-pointer text-[var(--text-secondary)]">全部页面（{createdProject.entryFiles?.length}）</summary>
+                <ul className="mt-2 space-y-1 list-disc pl-5">
+                  {createdProject.entryFiles?.map(path => <li key={path} className="break-all">{path}</li>)}
+                </ul>
+              </details>
+              <p id="upload-entry-help" className="mt-3 text-sm text-[var(--text-secondary)]">项目已保留。现在关闭也可稍后在编辑项目中修改入口，无需再次上传。</p>
+            </div>
+            <div className="flex gap-4">
+              <button type="button" onClick={handleClose} disabled={uploading} className="flex-1 py-3.5 rounded-2xl font-bold bg-[var(--bg-tertiary)] hover:bg-[var(--border)] disabled:opacity-50">保留并关闭</button>
+              <button type="submit" disabled={uploading || !entryFile} className="flex-1 py-3.5 rounded-2xl font-bold bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white disabled:opacity-50">{uploading ? '保存中...' : '保存并完成'}</button>
+            </div>
+          </form>
         ) : (
           /* 进度视图 */
-          <div className="p-6 flex flex-col items-center justify-center min-h-[280px]">
+          <div role="status" aria-live="polite" className="p-6 flex flex-col items-center justify-center min-h-[280px]">
             {stage === 'complete' ? (
               <>
                 <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-6">

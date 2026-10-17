@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { body, validationResult } from 'express-validator';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
@@ -20,7 +20,8 @@ import {
   projectFileExists,
   getProjectFilePath
 } from '../services/storageService';
-import { generateThumbnail } from '../services/thumbnailService';
+import { generateThumbnail, getThumbnail, getThumbnailPath } from '../services/thumbnailService';
+import path from 'path';
 import { ApiResponse, ApiError, ERROR_CODES, Project } from '@pagelet/shared';
 
 const router = Router();
@@ -60,7 +61,7 @@ const thumbnailUpload = multer({
     fileSize: 5 * 1024 * 1024 // 5MB
   },
   fileFilter: (_req, file, cb) => {
-    const ext = file.originalname.toLowerCase();
+    const ext = path.extname(file.originalname).toLowerCase();
     if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
       cb(null, true);
     } else {
@@ -96,7 +97,7 @@ router.post(
   '/',
   authMiddleware,
   upload.single('file'),
-  async (req: AuthRequest, res: Response): Promise<void> => {
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.file) {
       const error: ApiError = {
         success: false,
@@ -136,19 +137,24 @@ router.post(
       // 更新项目信息
       const project = updateProject(projectId, {
         description: description?.trim(),
-        status: 'active'
+        status: 'active',
+        entryFile: result.entryFile,
+        fileType: isZip ? 'zip' : 'html',
+        fileSize: req.file.size
       })!;
 
       const response: ApiResponse<Project> = {
         success: true,
-        data: project
+        data: { ...project, entryFiles: result.entryFiles }
       };
       res.status(201).json(response);
 
-      // 响应后再异步生成缩略图（不阻塞响应）
+      // 响应后再异步生成缩略图（不阻塞响应）；执行时读当前入口，避免旧入口封面覆盖用户已选入口。
       setTimeout(() => {
         try {
-          const htmlPath = getProjectFilePath(projectId, result.entryFile);
+          const current = findProjectById(projectId);
+          if (!current) return;
+          const htmlPath = getProjectFilePath(projectId, current.entryFile);
           generateThumbnail(projectId, htmlPath).then(() => {
             console.log('[Thumbnail] Generated for:', projectId);
           }).catch(err => {
@@ -160,8 +166,9 @@ router.post(
       }, 100);
     } catch (err) {
       // 删除已创建的项目
+      deleteProjectFiles(projectId);
       deleteProject(projectId);
-      throw err;
+      next(err);
     }
   }
 );
@@ -263,14 +270,27 @@ router.put(
       return;
     }
 
-    const { name, description, status } = req.body;
-    const project = updateProject(id, { name, description, status });
+    const { name, description, status, entryFile } = req.body;
+    const project = updateProject(id, { name, description, status, entryFile });
+    const entryChanged = entryFile !== undefined && project!.entryFile !== existingProject.entryFile;
 
     const response: ApiResponse<Project> = {
       success: true,
       data: project!
     };
     res.json(response);
+    if (entryChanged) {
+      const entry = project!.entryFile;
+      setImmediate(() => {
+        try {
+          generateThumbnail(id, getProjectFilePath(id, entry)).catch(err => {
+            console.error('[Thumbnail] Failed:', err.message);
+          });
+        } catch (err: any) {
+          console.error('[Thumbnail] Path error:', err.message);
+        }
+      });
+    }
   }
 );
 
@@ -511,7 +531,7 @@ router.post('/:id/thumbnail/upload', authMiddleware, thumbnailUpload.single('thu
     // 保存新缩略图
     fs.writeFileSync(thumbnailPath, req.file.buffer);
 
-    const thumbnail = `data:image/${ext.slice(1)};base64,${req.file.buffer.toString('base64')}`;
+    const thumbnail = getThumbnail(id)!;
 
     const response: ApiResponse<{ thumbnail: string }> = {
       success: true,
@@ -529,6 +549,39 @@ router.post('/:id/thumbnail/upload', authMiddleware, thumbnailUpload.single('thu
     };
     res.status(500).json(error);
   }
+});
+
+router.get('/:id/thumbnail', authMiddleware, (req: AuthRequest, res: Response): void => {
+  const project = findProjectById(req.params.id, false);
+  if (!project || project.createdBy !== req.userId) {
+    res.status(project ? 403 : 404).json({ success: false, error: {
+      code: project ? ERROR_CODES.FORBIDDEN : ERROR_CODES.PROJECT_NOT_FOUND,
+      message: project ? '无权访问此项目' : '项目不存在'
+    } });
+    return;
+  }
+  const thumbnailPath = getThumbnailPath(project.id);
+  if (!thumbnailPath) {
+    res.sendStatus(404);
+    return;
+  }
+  res.setHeader('Cache-Control', 'private, no-cache');
+  res.sendFile(path.resolve(thumbnailPath), { cacheControl: false, dotfiles: 'allow' });
+});
+
+router.get('/:id/view/*', authMiddleware, (req: AuthRequest, res: Response): void => {
+  const project = findProjectById(req.params.id, false);
+  if (!project || project.createdBy !== req.userId) {
+    res.sendStatus(project ? 403 : 404);
+    return;
+  }
+  const file = req.params[0];
+  if (!projectFileExists(project.id, file)) {
+    res.sendStatus(404);
+    return;
+  }
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.sendFile(getProjectFilePath(project.id, file), { cacheControl: false });
 });
 
 export default router;

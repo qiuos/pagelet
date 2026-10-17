@@ -52,6 +52,8 @@ export function errorHandler(
       apiError.code === ERROR_CODES.FILE_PARSE_ERROR
     ) {
       statusCode = 409;
+    } else if (apiError.code === ERROR_CODES.FILE_TOO_LARGE) {
+      statusCode = 413;
     } else if (apiError.code.startsWith('VALIDATION') || apiError.code.startsWith('INVALID')) {
       statusCode = 400;
     }

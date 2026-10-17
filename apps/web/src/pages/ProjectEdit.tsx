@@ -16,6 +16,7 @@ export default function ProjectEdit() {
   const [thumbnail, setThumbnail] = useState<string>('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [entryFile, setEntryFile] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -30,12 +31,15 @@ export default function ProjectEdit() {
     if (!id) return;
     try {
       setLoading(true);
+      setError('');
       const response = await projectsApi.get(id);
+      if (!response.data.success) throw new Error('加载项目失败');
       if (response.data.success) {
         setProject(response.data.data);
         setName(response.data.data.name);
         setDescription(response.data.data.description || '');
         setThumbnail(response.data.data.thumbnail || '');
+        setEntryFile(response.data.data.entryFile);
       }
     } catch (err) {
       console.error('Failed to load project:', err);
@@ -51,15 +55,17 @@ export default function ProjectEdit() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id || !name.trim()) return;
+    if (!id || !project || !name.trim() || saving) return;
 
     try {
       setSaving(true);
       setError('');
       const response = await projectsApi.update(id, {
         name: name.trim(),
-        description: description.trim() || undefined
+        description: description.trim() || undefined,
+        ...(entryFile !== project.entryFile ? { entryFile } : {}),
       });
+      if (!response.data.success) throw new Error('保存失败');
       if (response.data.success) {
         navigate(`/projects/${id}`);
       }
@@ -109,13 +115,15 @@ export default function ProjectEdit() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
+            role="alert"
             className="mb-6 p-4 rounded-lg bg-error/10 border border-error/20"
           >
             <p className="text-sm text-error">{error}</p>
+            {!project && <button type="button" onClick={loadProject} className="mt-3 px-4 py-2 rounded-lg border border-error text-error">重试加载</button>}
           </motion.div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" aria-busy={saving}>
           {/* 封面编辑 */}
           {project && (
             <div className={`p-6 rounded-xl border
@@ -172,6 +180,39 @@ export default function ProjectEdit() {
               </div>
 
               {project && (
+                <div>
+                  <label htmlFor="project-entry" className={`block text-sm font-medium mb-2
+                    ${theme === 'dark' ? 'text-dark-text-primary' : 'text-light-text-primary'}`}>
+                    默认入口
+                  </label>
+                  <select
+                    id="project-entry"
+                    value={entryFile}
+                    onChange={(e) => setEntryFile(e.target.value)}
+                    disabled={saving || !project.entryFiles?.length}
+                    aria-describedby="project-entry-path"
+                    className={`w-full min-w-0 px-4 py-2.5 rounded-lg border focus:border-accent focus:outline-accent disabled:opacity-50
+                      ${theme === 'dark'
+                        ? 'bg-dark-bg-tertiary text-dark-text-primary border-dark-border'
+                        : 'bg-light-bg-tertiary text-light-text-primary border-light-border'}`}
+                  >
+                    {(project.entryFiles?.length ? project.entryFiles : [project.entryFile]).map(path => (
+                      <option key={path} value={path}>{path}</option>
+                    ))}
+                  </select>
+                  <p id="project-entry-path" className="mt-2 text-sm break-all">{entryFile}</p>
+                  {!!project.entryFiles?.length && (
+                    <details className="mt-3 text-sm">
+                      <summary className="cursor-pointer">全部页面（{project.entryFiles.length}）</summary>
+                      <ul className="mt-2 space-y-1 list-disc pl-5">
+                        {project.entryFiles.map(path => <li key={path} className="break-all">{path}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {project && (
                 <div className={`text-sm
                   ${theme === 'dark' ? 'text-dark-text-secondary' : 'text-light-text-secondary'}`}>
                   <p>文件类型: {project.fileType.toUpperCase()}</p>
@@ -184,9 +225,9 @@ export default function ProjectEdit() {
           <div className="flex gap-3">
             <button
               type="submit"
-              disabled={saving || !name.trim()}
+              disabled={saving || !project || !name.trim()}
               className={`flex-1 py-2.5 rounded-lg font-medium transition-colors
-                ${saving || !name.trim()
+                ${saving || !project || !name.trim()
                   ? 'bg-accent/50 cursor-not-allowed'
                   : 'bg-accent hover:bg-accent-hover'}
                 text-white`}

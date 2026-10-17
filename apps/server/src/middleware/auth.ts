@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../utils/jwt';
+import { verifyToken, decodeToken } from '../utils/jwt';
 import { ApiError, ERROR_CODES, HTTP_STATUS } from '@pagelet/shared';
 
 export interface AuthRequest extends Request {
@@ -8,9 +8,21 @@ export interface AuthRequest extends Request {
   userRole?: string;
 }
 
+export function setAuthCookie(req: Request, res: Response, token: string): void {
+  const payload = decodeToken(token) as ({ exp?: number } | null);
+  res.cookie('token', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
+    path: '/api',
+    ...(payload?.exp ? { expires: new Date(payload.exp * 1000) } : {})
+  });
+}
+
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.cookies?.token;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) :
+    (['GET', 'HEAD'].includes(req.method) ? req.cookies?.token : undefined);
 
   if (!token) {
     const error: ApiError = {
@@ -45,7 +57,8 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
 
 export function optionalAuthMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.cookies?.token;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) :
+    (['GET', 'HEAD'].includes(req.method) ? req.cookies?.token : undefined);
 
   if (token) {
     const payload = verifyToken(token);

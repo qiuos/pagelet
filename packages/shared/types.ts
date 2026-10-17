@@ -33,7 +33,8 @@ export interface Project {
   fileType: FileType;
   fileSize: number;
   entryFile: string;
-  thumbnail?: string;  // 缩略图 base64
+  entryFiles?: string[];
+  thumbnail?: string;  // 需认证的同源缩略图 URL
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -124,6 +125,7 @@ export interface UpdateProjectRequest {
   name?: string;
   description?: string;
   status?: ProjectStatus;
+  entryFile?: string;
 }
 
 export interface CreateShareRequest {
