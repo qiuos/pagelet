@@ -35,7 +35,6 @@ Thumbs.db
 pagelet-design.md
 
 # AI memory
-.claude/
 .ai-memory
 .ai_memory/
 
@@ -56,3 +55,13 @@ data/projects/*
 !data/projects/.gitkeep
 apps/server/data/uploads/
 apps/server/data/projects/
+
+# pkqcode:start
+CLAUDE.md
+.claude/
+.codex/
+.spec/
+AGENTS.md
+.pkqcode/
+.agents/
+# pkqcode:end
