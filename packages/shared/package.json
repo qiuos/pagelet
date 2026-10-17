@@ -1,6 +1,6 @@
 {
   "name": "@pagelet/shared",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shared types and utilities for Pagelet",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
