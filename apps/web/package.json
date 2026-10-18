@@ -1,6 +1,6 @@
 {
   "name": "@pagelet/web",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Pagelet frontend application",
   "type": "module",
   "scripts": {

@@ -1,6 +1,6 @@
 {
   "name": "@pagelet/server",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Pagelet backend server",
   "main": "dist/index.js",
   "scripts": {

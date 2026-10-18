@@ -1,6 +1,6 @@
 {
   "name": "pagelet",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "静态网页展示工具 - 让作品集分享更优雅",
   "private": true,
   "scripts": {
