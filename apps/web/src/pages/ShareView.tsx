@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { publicApi } from '../api/client';
-import type { Share, Project } from '@pagelet/shared';
+import type { Share } from '@pagelet/shared';
+import ShareNavigation from './ShareNavigation';
+import { htmlPages, pageUrl } from './sharePageTree';
 import type { ApiError } from '@pagelet/shared';
 
 interface ShareInfo {
@@ -11,6 +13,8 @@ interface ShareInfo {
     id: string;
     name: string;
     description?: string;
+    entryFile?: string;
+    entryFiles?: string[];
   };
   creatorName: string;
   needsPassword: boolean;
@@ -24,7 +28,6 @@ export default function ShareView() {
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [isVerified, setIsVerified] = useState(false);
 
   useEffect(() => {
     if (slug) {
@@ -40,10 +43,8 @@ export default function ShareView() {
       const response = await publicApi.getShare(slug);
       if (response.data.success) {
         setShareInfo(response.data.data);
-        // 如果不需要密码，直接标记为已验证
-        if (!response.data.data.needsPassword) {
-          setIsVerified(true);
-        }
+      } else {
+        setError('分享链接不存在或已失效');
       }
     } catch (err) {
       const apiError = err as { response?: { data?: ApiError } };
@@ -63,7 +64,7 @@ export default function ShareView() {
     try {
       const response = await publicApi.verifyPassword(slug, password);
       if (response.data.success) {
-        setIsVerified(true);
+        await loadShareInfo();
       }
     } catch (err) {
       const apiError = err as { response?: { data?: ApiError } };
@@ -100,7 +101,7 @@ export default function ShareView() {
   const { share, project, creatorName } = shareInfo;
 
   // 需要密码但未验证
-  if (shareInfo.needsPassword && !isVerified) {
+  if (shareInfo.needsPassword) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-dark-bg-primary to-dark-bg-secondary">
         <motion.div
@@ -177,10 +178,15 @@ export default function ShareView() {
     );
   }
 
-  // 已验证，显示 iframe（全屏）
+  const pages = htmlPages(project.entryFiles);
+  if (pages.length > 1) {
+    return <ShareNavigation key={`${slug}:${project.id}`} slug={slug!} name={project.name} pages={pages} entryFile={project.entryFile} />;
+  }
+
+  // 单页或旧版元数据保持全屏预览。
   return (
     <iframe
-      src={`/api/s/${slug}/view`}
+      src={pageUrl(slug!)}
       className="fixed inset-0 w-full h-full border-0"
       title={project.name}
     />
