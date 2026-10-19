@@ -4,7 +4,7 @@ import { findShareBySlug, validateShare, incrementViewCount, logView } from '../
 import { findProjectById } from '../services/projectService';
 import { findUserById } from '../services/userService';
 import { ApiResponse, ApiError, ERROR_CODES } from '@pagelet/shared';
-import { getProjectFilePath, projectFileExists } from '../services/storageService';
+import { getProjectFilePath, projectFileExists, listProjectFiles } from '../services/storageService';
 import { hasShareCookie, setShareCookie } from '../utils/shareToken';
 
 const router = Router();
@@ -76,6 +76,8 @@ router.get('/:slug', (req: Request, res: Response): void => {
   const creator = findUserById(share.createdBy);
   const creatorName = creator?.name || '';
 
+  const needsPassword = !!share.passwordHash && !hasShareCookie(req, share, 'password');
+
   // 返回分享信息
   const response: ApiResponse<{
     share: typeof share;
@@ -83,6 +85,8 @@ router.get('/:slug', (req: Request, res: Response): void => {
       id: string;
       name: string;
       description?: string;
+      entryFile?: string;
+      entryFiles?: string[];
     };
     creatorName: string;
     needsPassword: boolean;
@@ -93,10 +97,14 @@ router.get('/:slug', (req: Request, res: Response): void => {
       project: {
         id: project.id,
         name: project.name,
-        description: project.description
+        description: project.description,
+        ...(!needsPassword ? {
+          entryFile: project.entryFile,
+          entryFiles: listProjectFiles(project.id).filter(name => /\.html?$/i.test(name))
+        } : {})
       },
       creatorName,
-      needsPassword: !!share.passwordHash
+      needsPassword
     }
   };
   res.json(response);

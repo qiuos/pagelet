@@ -129,12 +129,24 @@ function rejectZip(zip, label) {
   const metadata = (await request(`/api/s/${share.slug}`)).json().data;
   assert(!('password' in metadata.share));
   assert(!('passwordHash' in metadata.share));
+  assert.equal(metadata.needsPassword, true);
+  assert(!('entryFile' in metadata.project));
+  assert(!('entryFiles' in metadata.project));
+  const forgedMetadata = (await request(`/api/s/${share.slug}`, { headers: { Cookie: `share_token_${share.slug}=1`, 'x-share-token': '1' } })).json().data;
+  assert.equal(forgedMetadata.needsPassword, true);
+  assert(!('entryFile' in forgedMetadata.project));
+  assert(!('entryFiles' in forgedMetadata.project));
   assert.equal((await request(base, { headers: { Cookie: `share_token_${share.slug}=1`, 'x-share-token': '1' } })).status, 401);
   assert.equal((await request(`/api/s/${share.slug}/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"password":"wrong"}' })).status, 400);
   const verified = await request(`/api/s/${share.slug}/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"password":"site-password"}' });
   assert.equal(verified.status, 200);
   assert(verified.headers['set-cookie'][0].includes('HttpOnly'));
   let cookie = cookies(verified);
+  const authorizedMetadata = (await request(`/api/s/${share.slug}`, { headers: { Cookie: cookie } })).json().data;
+  assert.equal(authorizedMetadata.needsPassword, false);
+  assert.equal(authorizedMetadata.project.entryFile, entryFile);
+  assert.deepEqual(authorizedMetadata.project.entryFiles, project.entryFiles);
+  assert.equal(shares.findShareById(share.id).viewCount, 0);
   const redirected = await request(base + '?item=42', { headers: { Cookie: cookie } });
   assert.equal(redirected.status, 302);
   assert(redirected.headers.location.endsWith('/report-list.html?item=42'));
@@ -159,9 +171,15 @@ function rejectZip(zip, label) {
   assert.equal((await request(base + '/%E5%8E%9F%E5%9E%8B/css/site.css')).status, 401);
   const anotherShare = shares.createShare(project.id, owner.id, { password: 'other-password' });
   assert.equal((await request(`/api/s/${anotherShare.slug}/view`, { headers: { Cookie: cookie } })).status, 401);
+  const otherMetadata = (await request(`/api/s/${anotherShare.slug}`, { headers: { Cookie: cookie } })).json().data;
+  assert.equal(otherMetadata.needsPassword, true);
+  assert(!('entryFile' in otherMetadata.project));
+  assert(!('entryFiles' in otherMetadata.project));
   shares.updateShare(share.id, { isActive: false });
+  assert.equal((await request(`/api/s/${share.slug}`, { headers: { Cookie: cookie } })).status, 400);
   assert.equal((await request(new URL('../css/site.css', pageUrl).pathname, { headers: { Cookie: cookie } })).status, 400);
   shares.updateShare(share.id, { isActive: true, expiresAt: '2000-01-01T00:00:00Z' });
+  assert.equal((await request(`/api/s/${share.slug}`, { headers: { Cookie: cookie } })).status, 400);
   assert.equal((await request(new URL('../css/site.css', pageUrl).pathname, { headers: { Cookie: cookie } })).status, 400);
 
   const oneTime = shares.createShare(project.id, owner.id, { isOneTime: true });
@@ -187,6 +205,43 @@ function rejectZip(zip, label) {
   for (const bad of ['%2e%2e%2foutside.html', '%2Fetc%2Fpasswd', '%5c..%5csecret', '.thumbnail.jpg']) {
     assert((await request(`/api/s/${open.slug}/view/${bad}`)).status >= 400);
   }
+  const openMetadata = (await request(`/api/s/${open.slug}`)).json().data;
+  assert.equal(openMetadata.needsPassword, false);
+  assert.equal(openMetadata.project.entryFile, entryFile);
+  assert.deepEqual(openMetadata.project.entryFiles, project.entryFiles);
+  assert.equal((await request('/api/s/missing-share')).status, 404);
+
+  const deepPath = '目录 空格/#分组/100%/页面 #%.HTM';
+  const deepFixture = {
+    'index.html': '<html>entry</html>',
+    [deepPath]: '<html><link rel="stylesheet" href="site%20%23%25.css">deep page</html>',
+    '目录 空格/#分组/100%/site #%.css': 'body { color: red }',
+    'assets/only.txt': 'not a page'
+  };
+  const deepUpload = await upload(zipOf(deepFixture).toBuffer(), 'Deep navigation');
+  assert.equal(deepUpload.status, 201, deepUpload.text);
+  const deepProject = deepUpload.json().data;
+  const deepShare = shares.createShare(deepProject.id, owner.id);
+  const deepMetadata = (await request(`/api/s/${deepShare.slug}`)).json().data;
+  assert.equal(deepMetadata.project.entryFile, 'index.html');
+  assert.deepEqual(deepMetadata.project.entryFiles, ['index.html', deepPath].sort());
+  const deepUrl = `/api/s/${deepShare.slug}/view/${deepPath.split('/').map(encodeURIComponent).join('/')}`;
+  const deepPage = await request(deepUrl);
+  assert.equal(deepPage.status, 200, deepPage.text);
+  assert.equal(deepPage.text, deepFixture[deepPath]);
+  const deepResource = new URL('site%20%23%25.css', 'http://localhost' + deepUrl);
+  assert.equal((await request(deepResource.pathname, { headers: { Cookie: cookies(deepPage) } })).text,
+    deepFixture['目录 空格/#分组/100%/site #%.css']);
+  assert.equal((await request(`/api/s/${deepShare.slug}/view/index.html`, { headers: { Cookie: cookies(deepPage) } })).status, 200);
+
+  const singleProject = projects.createProject('Single HTML', owner.id, { entryFile: 'index.htm' });
+  storage.processHtmlFile(singleProject.id, file(Buffer.from('<html>single</html>'), '中文.htm'));
+  const singleShare = shares.createShare(singleProject.id, owner.id);
+  const singleMetadata = (await request(`/api/s/${singleShare.slug}`)).json().data;
+  assert.equal(singleMetadata.needsPassword, false);
+  assert.equal(singleMetadata.project.entryFile, 'index.htm');
+  assert.deepEqual(singleMetadata.project.entryFiles, ['index.htm']);
+
   const outside = path.join(temp, 'outside.html');
   fs.writeFileSync(outside, 'secret');
   fs.symlinkSync(outside, path.join(process.env.PROJECTS_DIR, project.id, 'link.html'));
